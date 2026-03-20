@@ -26,7 +26,7 @@ You are an elite CTF solver AI. Your goal is to systematically analyze challenge
 
 1. Identify file/type and structure
 2. Extract all visible and hidden data
-3. Search for patterns (especially flag formats like `flag{}`, `picoCTF{}`, etc.)
+3. Search for patterns (especially flag formats like `flag{{}}`, `picoCTF{{}}`, etc.)
 4. Try transformations:
    * Encodings (base16/32/64/85, rot13, XOR)
    * Compression / archives
@@ -102,13 +102,6 @@ Description:
 Potential Techniques by category:
 - CRYPTO: Check for alphabet substitution (A=1,B=2..Z=26).
   CRITICAL: This encoding is BIDIRECTIONAL. If a number in the description decodes to a word
-  AND the hint gives you another word as the answer, you MUST encode that word back to numbers
-  using the SAME scheme before submitting.
-  Example: 191311212 → SMALL confirms the cipher. "the flag is faraway" → encode FARAWAY:
-  F=6, A=1, R=18, A=1, W=23, A=1, Y=25 → concatenate → "6118123125" → ZeroDays{{6118123125}}
-  VERIFICATION STEP: count the letters in your answer word, then count your number groups —
-  they must match. FARAWAY=7 letters → 7 groups (6,1,18,1,23,1,25) → 10 digits total.
-  Always ask: does the answer word need to be converted back to numbers?
   Also try: Caesar/ROT, base64/32/hex, XOR, Vigenere.
 - FORENSICS: For pcap/pcapng files:
   STEP 1 — always export HTTP objects first:
@@ -116,9 +109,7 @@ Potential Techniques by category:
   STEP 2 — list what was extracted: ls /tmp/pcap_out/
   STEP 3 — use the Read tool to view EVERY image file extracted (png, jpg, gif).
     The Read tool supports images — you will see them visually. Read each one.
-    IMPORTANT: The flag will be literally written as ZeroDays{{ANSWER}} somewhere in one of the images.
-    Look for that exact format. Do NOT invent a flag from other text you see — only submit text
-    that is literally formatted as ZeroDays{{...}} in the image.
+    IMPORTANT: The flag will likely be written as ZeroDays{{ANSWER}} somewhere in one of the images.
   STEP 4 — also run: strings /tmp/pcap_out/* | grep -i "ZeroDays\|flag\|CTF"
   For zip/tar: extract and run strings/grep on contents.
 - REVERSING: Use strings, objdump, javap -c for .class files. Run the binary if safe.
@@ -130,6 +121,7 @@ SOLUTION: {{"flag": "ZeroDays{{ANSWER}}", "reasoning": "explanation of why this 
 CRITICAL:  
 - All flags use the format: ZeroDays{{ANSWER}}
 - Expect the challenges to make jokes or references. These could or could not be part of the answer.
+- When dealing with large amounts of data, try not to read and write it, treat it as a single object and pass it to different tools for analysis
 """
 
 
@@ -156,15 +148,18 @@ def solve_challenge_cli(challenge: dict, model: str, incorrect_flags: list[str] 
     incorrect_info = ""
     if incorrect_flags:
         flags_list = ", ".join(f'"{f}"' for f in incorrect_flags)
-        incorrect_info = f"\nPREVIOUS INCORRECT ATTEMPTS: {flags_list}\nDo NOT submit any of these again. Re-examine the challenge from scratch with a different approach.\n"
+        incorrect_info = f"\nPREVIOUS INCORRECT ATTEMPTS: {flags_list}\nDo NOT submit any of these again. Re-examine the challenge from scratch with a different approach. But use processed documents to save time\n"
+
+    def _esc(s: str) -> str:
+        return s.replace("{", "{{").replace("}", "}}")
 
     prompt = CTF_PROMPT_TEMPLATE.format(
-        name=challenge["name"],
-        category=challenge["category"],
+        name=_esc(challenge["name"]),
+        category=_esc(challenge["category"]),
         points=challenge["points"],
-        description=challenge["description"],
-        url_info=url_info,
-        file_info=file_info,
+        description=_esc(challenge["description"]),
+        url_info=_esc(url_info),
+        file_info=_esc(file_info),
     ) + incorrect_info
 
     try:
@@ -293,19 +288,19 @@ async def run_solver(dev: bool = False, retry: bool = False):
 
     if retry_ultra:
         model = "claude-opus-4-6"
-        timeout = 600
+        timeout = 1200
     elif retry_hard:
         model = "claude-sonnet-4-6"
-        timeout = 600
+        timeout = 900
     elif retry:
-        model = "claude-sonnet-4-6"
-        timeout = 120
+        model = "claude-haiku-4-5-20251001"
+        timeout = 600
     elif dev:
         model = "claude-haiku-4-5-20251001"
         timeout = 30
     else:
-        model = "claude-sonnet-4-6"
-        timeout = 60
+        model = "claude-haiku-4-5-20251001"
+        timeout = 600
 
     print(f"[*] Solving {len(challenges)} challenges with {model} via claude CLI (sorted by file size)...")
 
